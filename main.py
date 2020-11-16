@@ -1,5 +1,4 @@
 
-
 import json
 from flask import Flask, request, jsonify
 import sys
@@ -93,21 +92,25 @@ def getCandleData(symbol, whichCandle, date, apikey, accessToken):
 @app.route('/api/live', methods=['GET'])
 @cross_origin(origin='*')
 def getLive():
+    data = ""
     global livePath
-    path = livePath+'/'
-    token = request.args["instrumenttoken"]
-    fullPath = path + token+".json"
-    data=""
-    
-    with open(fullPath,'r') as f:
-        s = f.read()
-        s = s.replace('\t','')
-        s = s.replace('\n','')
-        s = s.replace(',}','}')
-        s = s.replace(',]',']')
-        s = s.replace("'", '"')
-        data = json.loads(s)
-        f.close()
+    try:        
+        path = livePath+'/'
+        token = request.args["instrumenttoken"]
+        fullPath = path + token+".json"
+        data=""
+        
+        with open(fullPath,'r') as f:
+            s = f.read()
+            s = s.replace('\t','')
+            s = s.replace('\n','')
+            s = s.replace(',}','}')
+            s = s.replace(',]',']')
+            s = s.replace("'", '"')
+            data = json.loads(s)
+            f.close()
+    except Exception as e:
+        data = {}
     return data
 
 @app.route('/api/candle/3M', methods=['GET'])
@@ -167,7 +170,7 @@ def writeToFile(fullPath, content):
 
     
 def event_handler_quote_update(message):
-    #print(message)
+    print(message)
     global livePath, candle3minPath, candle5minPath
     
     symbol = str(str(str(message["instrument"]).split(",")[2]).split("=")[1])
@@ -206,7 +209,7 @@ def event_handler_quote_update(message):
         "exchange_time_stamp": exchange_time_stamp
     }
     
-    exchangeTime = datetime.datetime.fromtimestamp(float(exchange_time_stamp), timezone('Asia/Kolkata'))
+    exchangeTime = datetime.datetime.fromtimestamp(int(exchange_time_stamp), timezone('Asia/Kolkata'))
     eHour = exchangeTime.hour
     eMin = exchangeTime.minute
     eSec = exchangeTime.second
