@@ -221,11 +221,9 @@ def event_handler_quote_update(message):
     fullPath = livePath + '/' + str(message["token"])+".json"
     writeToFile(fullPath, x)
     
-    now = datetime.datetime.now()
-    print(str(now))
-    now = datetime.datetime.now()
-    today = now.date()
-    date = today.strftime("%d-%m-%Y")
+    date = str(exchangeTime.day).zfill(2) +"-"+ str(exchangeTime.month).zfill(2) +"-"+ str(exchangeTime.year).zfill(2)
+    print(date)
+    
     
     if(eHour==9 and eMin==18 and (eSec>=0 and eSec<=30)):
         fullPath = candle3minPath + '/' + str(message["token"])+".json"
@@ -258,8 +256,10 @@ def event_handler_quote_update(message):
 
     
 def getIntradaySymbols():
-    url = "http://puneeth.pythonanywhere.com/data/get/intradaysymbols";
-    res = requests.get(url)
+    url = "http://pro.justalgotrades.com/api/trades/today";
+    headers = {'Content-Type': 'application/json'}
+    res = requests.get(url, headers=headers)
+    print(res)
     data = res.json()["data"];
     return data
 
@@ -296,24 +296,8 @@ def startUpdate():
     access_token = fetchAccessTokenForWebsocket()
     print(access_token)
     for name in data:
-        n=""
-        h=""
-        l=""
-        i = 0
-        c=0
-        for key, value in name.items():
-            if(key=="name"):
-                n = value
-                allSymbols.append(n)
-            if(key=="high"):
-                h = value
-            if(key=="low"):
-                l = value
-            if(key=="count"):
-                c = value
-                
-            
-                
+        allSymbols.append(name)
+        
     #print("Aliceblue access token = "+access_token)
     socket_example(allSymbols,"update", access_token['access_token'])
 
@@ -511,7 +495,6 @@ def set_allow_origin(resp):
     
 if __name__ == '__main__':
   app.run(host='127.0.0.1', port=8080)
-
 
 
 
