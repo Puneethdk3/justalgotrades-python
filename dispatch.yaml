@@ -1,6 +1,8 @@
 dispatch:
   - url: "justalgotrades.com/*"
     service: default
+  - url: "www.justalgotrades.com/*"
+    service: default
   - url: "pro.justalgotrades.com/*"
     service: backend
   - url: "deploy.justalgotrades.com/*"
