@@ -35,8 +35,7 @@ socket_opened = False
 path = "/Users/pkaribasappa/Desktop/Share/UpstoxAlgo/Websocket/"
 websocketBroker = "aliceblue"
     
-livePath=""
-livePathExit="" 
+livePath="" 
 candle3minPath=""
 candle5minPath=""
 
@@ -74,32 +73,6 @@ def socket_example(intradaySymbols, purpose, access_token):
     
     alice.subscribe(subscribeArray, LiveFeedType.MARKET_DATA)
     
-def socket_example_exit(intradaySymbols, purpose, access_token):
-    print("socket")
-    global allData
-    
-    alice = AliceBlue(username=clientId, password=password, access_token=access_token, master_contracts_to_download=['NSE'])
-    
-    alice.start_websocket(subscribe_callback=event_handler_quote_update_exit,
-                      socket_open_callback=open_callback,
-                      run_in_background=True)
-    while(socket_opened==False):
-        pass
-    
-    subscribeArray = []
-    
-    incr=0
-    for name in intradaySymbols:
-        
-        obj = alice.get_instrument_by_symbol('NSE', name)
-        if (obj!=None):
-            subscribeArray.append(obj)
-        incr+=1
-           
-            
-    
-    alice.subscribe(subscribeArray, LiveFeedType.SNAPQUOTE)
-    
 def open_callback():
     global socket_opened
     socket_opened = True
@@ -123,30 +96,6 @@ def getLive():
     global livePath
     try:        
         path = livePath+'/'
-        token = request.args["instrumenttoken"]
-        fullPath = path + token+".json"
-        data=""
-        
-        with open(fullPath,'r') as f:
-            s = f.read()
-            s = s.replace('\t','')
-            s = s.replace('\n','')
-            s = s.replace(',}','}')
-            s = s.replace(',]',']')
-            s = s.replace("'", '"')
-            data = json.loads(s)
-            f.close()
-    except Exception as e:
-        data = {}
-    return data
-
-@app.route('/api/live/exit', methods=['GET'])
-@cross_origin(origin='*')
-def getLiveExit():
-    data = ""
-    global livePathExit
-    try:        
-        path = livePathExit+'/'
         token = request.args["instrumenttoken"]
         fullPath = path + token+".json"
         data=""
@@ -218,39 +167,15 @@ def writeToFile(fullPath, content):
     f.write(str(content))
     f.close()
     
-    
-def event_handler_quote_update_exit(message):
-    #print(message)
-    global livePathExit
-    symbol = str(str(str(message["instrument"]).split(",")[2]).split("=")[1])
-    symbol = symbol.replace("'","")
-    bid_prices = message["bid_prices"]
-    ask_prices = message["ask_prices"]
-    exchange_time_stamp = str(message["exchange_time_stamp"])
-    buyers = message["buyers"]
-    bid_quantities = message["bid_quantities"]
-    sellers = message["sellers"]
-    ask_quantities = message["ask_quantities"]
-    
-    x = {
-        "symbol": symbol,
-        "bid_prices": bid_prices,
-        "buyers": buyers,
-        "bid_quantities": bid_quantities,
-        "ask_prices": ask_prices,
-        "sellers": sellers,
-        "ask_quantities": ask_quantities,
-        "exchange_time_stamp": exchange_time_stamp
-    }
-    fullPath = livePathExit + '/' + str(message["token"])+".json"
-    writeToFile(fullPath, x)
+
     
 def event_handler_quote_update(message):
-    #print(message)
+    print(message)
     global livePath, candle3minPath, candle5minPath
     
     symbol = str(str(str(message["instrument"]).split(",")[2]).split("=")[1])
     symbol = symbol.replace("'","")
+    print(symbol)
     open = str(message["open"])
     high = str(message["high"])
     low = str(message["low"])
@@ -288,6 +213,11 @@ def event_handler_quote_update(message):
     eHour = exchangeTime.hour
     eMin = exchangeTime.minute
     eSec = exchangeTime.second
+    print(eHour)
+    print(eMin)
+    print(eSec)
+    print(exchange_time_stamp)
+    print(exchangeTime)
     fullPath = livePath + '/' + str(message["token"])+".json"
     writeToFile(fullPath, x)
     
@@ -329,7 +259,6 @@ def getIntradaySymbols():
     url = "http://pro.justalgotrades.com/api/trades/today";
     headers = {'Content-Type': 'application/json'}
     res = requests.get(url, headers=headers)
-
     print(res)
     data = res.json()["data"];
     return data
@@ -371,27 +300,6 @@ def startUpdate():
         
     #print("Aliceblue access token = "+access_token)
     socket_example(allSymbols,"update", access_token['access_token'])
-    
-def startUpdateExit():
-    global access_token
-    
-        
-    data=""
-    try:
-        data = getIntradaySymbols()
-    except Exception as e:
-        print(str(e))
-        data = getIntradaySymbols()
-    
-    print("got intraday symbols")
-    allSymbols=[]
-    access_token = fetchAccessTokenForWebsocket()
-    print(access_token)
-    for name in data:
-        allSymbols.append(name)
-        
-    #print("Aliceblue access token = "+access_token)
-    socket_example_exit(allSymbols,"update", access_token['access_token'])
 
 
 def startInsert():
@@ -523,28 +431,6 @@ def startWebsocket():
     startUpdate()
     return {'status': 'started'}
 
-@app.route('/api/websocket/start/exit', methods=['GET'])
-@cross_origin(origin='*')
-def startWebsocketForExit():
-    global final_directory, livePathExit, upstoxAccessToken
-    upstoxAccessToken = request.args.get('upstoxAccessToken')
-    print(upstoxAccessToken)
-    current_directory = os.getcwd()
-    final_directory = os.path.join(current_directory, r'aliceblue-exit')
-    if not os.path.exists(final_directory):
-        os.makedirs(final_directory)
-    else:
-        os.system("rm -rf "+final_directory)
-    
-    livePathExit = os.path.join(final_directory, r'live')
-    if not os.path.exists(livePathExit):
-        os.makedirs(livePathExit)
-    else:
-        os.system("rm -rf "+livePathExit)
-   
-    startUpdateExit()
-    return {'status': 'started'}
-
 
     
     
@@ -609,7 +495,6 @@ def set_allow_origin(resp):
     
 if __name__ == '__main__':
   app.run(host='127.0.0.1', port=8080)
-
 
 
 
