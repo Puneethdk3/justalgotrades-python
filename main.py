@@ -10,6 +10,7 @@ import datetime
 import pytz
 from flask_cors import CORS, cross_origin
 from pytz import timezone
+import threading
 app = Flask(__name__)
 
 cors = CORS(app)
@@ -19,6 +20,9 @@ logging.basicConfig(level=logging.INFO)
 
 isFirstTime = False
 
+#websocket var
+exitWS1 = False
+exitWS2 = False
 
 #Upstox
 upstoxApiKey = 'dPMbue9lq7abjTPCeuJ0Y8tYNEXdwKDd3OQiashl'
@@ -221,7 +225,10 @@ def writeToFile(fullPath, content):
     
 def event_handler_quote_update_exit(message):
     #print(message)
-    global livePathExit
+    global livePathExit,  exitWS1, exitWS2
+    if(exitWS2 == True):
+        sys.exit('Exiting')
+        
     symbol = str(str(str(message["instrument"]).split(",")[2]).split("=")[1])
     symbol = symbol.replace("'","")
     bid_prices = message["bid_prices"]
@@ -245,10 +252,16 @@ def event_handler_quote_update_exit(message):
     fullPath = livePathExit + '/' + str(message["token"])+".json"
     writeToFile(fullPath, x)
     
+    
+    
 def event_handler_quote_update(message):
     #print(message)
-    global livePath, candle3minPath, candle5minPath
     
+    global livePath, candle3minPath, candle5minPath, exitWS1, exitWS2
+    
+    if(exitWS1 == True):
+        sys.exit('Exiting')
+        
     symbol = str(str(str(message["instrument"]).split(",")[2]).split("=")[1])
     symbol = symbol.replace("'","")
     open = str(message["open"])
@@ -322,7 +335,8 @@ def event_handler_quote_update(message):
                     "exchange_time_stamp": res[0]["timestamp"]
                 }
                 writeToFile(fullPath, candle5MinData)
-            
+        
+    
 
     
 def getIntradaySymbols():
@@ -492,7 +506,9 @@ def fetchAccessTokenForWebsocket():
 @app.route('/api/websocket/start', methods=['GET'])
 @cross_origin(origin='*')
 def startWebsocket():
-    global final_directory, livePath, candle3minPath, candle5minPath, upstoxAccessToken
+    
+    global final_directory, livePath, candle3minPath, candle5minPath, upstoxAccessToken, exitWS1
+    exitWS1 = False
     upstoxAccessToken = request.args.get('upstoxAccessToken')
     print(upstoxAccessToken)
     current_directory = os.getcwd()
@@ -526,7 +542,8 @@ def startWebsocket():
 @app.route('/api/websocket/start/exit', methods=['GET'])
 @cross_origin(origin='*')
 def startWebsocketForExit():
-    global final_directory, livePathExit, upstoxAccessToken
+    global final_directory, livePathExit, upstoxAccessToken, exitWS2
+    exitWS2 = False
     upstoxAccessToken = request.args.get('upstoxAccessToken')
     print(upstoxAccessToken)
     current_directory = os.getcwd()
@@ -548,48 +565,21 @@ def startWebsocketForExit():
 
     
     
-@app.route('/api/websocket/end', methods=['GET'])
+@app.route('/api/websocket/start/end', methods=['GET'])
 @cross_origin(origin='*')
-def endWebsocket():
-    print("initiated unsubscribe")
-    data=""
-    try:
-        data = getIntradaySymbols()
-    except Exception as e:
-        print(str(e))
-        data = getIntradaySymbols()
-    print("got intraday symbols")
-    allSymbols=[]
-    for name in data:
-        n=""
-        h=""
-        l=""
-        i = 0
-        for key, value in name.items():
-            if(key=="name"):
-                n = value
-            if(key=="high"):
-                h = value
-            if(key=="low"):
-                l = value
-            
-        try:
-            allSymbols.append(n)
-        except Exception as e:
-            print(e)
-    access_token = fetchAccessTokenForWebsocket()
-    alice = AliceBlue(username=clientId, password=password, access_token=access_token['access_token'], master_contracts_to_download=['NSE'])    
-    
-    unSubscribeArray = []
-        
-    print('unsubscribe started')
-    for name in allSymbols:
-        obj = alice.get_instrument_by_symbol('NSE', name)
-        alice.unsubscribe(alice.get_instrument_by_symbol('NSE', name), LiveFeedType.MARKET_DATA)
-        print(str(name))
-        
-    print('unsubscribe completed')
-    return {'status': 'ended'}
+def endWebsocketStart():
+    global exitWS1
+    exitWS1 = True
+    print('reset variable for websocket start')
+    return {'status': 'reset variable for websocket start'}
+
+@app.route('/api/websocket/start/exit/end', methods=['GET'])
+@cross_origin(origin='*')
+def endWebsocketExit():
+    global exitWS2
+    exitWS2 = True
+    print('reset variable for websocket exit')
+    return {'status': 'reset variable for websocket exit'}
 
 
 
