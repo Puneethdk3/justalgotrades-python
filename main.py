@@ -110,15 +110,19 @@ def open_callback():
     
 
 def getCandleData(symbol, whichCandle, date, apikey, accessToken):
-    headers = {
-                'Authorization': 'Bearer '+accessToken,
-                'x-api-key': apikey
-              }
-    url = "https://api.upstox.com/historical/nse_eq/"+symbol+"/"+whichCandle+"?format=json&start_date="+date+"&end_date="+date+"";
-    res = requests.get(url, headers=headers)
-    
-    data = res.json()["data"];
-    return data
+    try:
+        headers = {
+                    'Authorization': 'Bearer '+accessToken,
+                    'x-api-key': apikey
+                  }
+        url = "https://api.upstox.com/historical/nse_eq/"+symbol+"/"+whichCandle+"?format=json&start_date="+date+"&end_date="+date+"";
+        res = requests.get(url, headers=headers)
+        
+        data = res.json()["data"];
+        return data
+    except Exception as e:
+        data = []
+        return data
 
 @app.route('/api/live', methods=['GET'])
 @cross_origin(origin='*')
@@ -313,12 +317,20 @@ def event_handler_quote_update(message):
         if(os.path.exists(fullPath) == False):
             print("Fetching 3min candle data")
             res = getCandleData(symbol, '3', date, upstoxApiKey, upstoxAccessToken)
-            if(len(res)>0):
+            if(len(res) > 0):
                 candle3MinData = {
                     "symbol": symbol,
                     "high": res[0]["high"],
                     "low": res[0]["low"],
                     "exchange_time_stamp": res[0]["timestamp"]
+                }
+                writeToFile(fullPath, candle3MinData)
+            else:
+                candle3MinData = {
+                    "symbol": symbol,
+                    "high": high,
+                    "low": low,
+                    "exchange_time_stamp": exchange_time_stamp
                 }
                 writeToFile(fullPath, candle3MinData)
         
@@ -333,6 +345,15 @@ def event_handler_quote_update(message):
                     "high": res[0]["high"],
                     "low": res[0]["low"],
                     "exchange_time_stamp": res[0]["timestamp"]
+                }
+                writeToFile(fullPath, candle5MinData)
+                
+            else:
+                candle5MinData = {
+                    "symbol": symbol,
+                    "high": high,
+                    "low": low,
+                    "exchange_time_stamp": exchange_time_stamp
                 }
                 writeToFile(fullPath, candle5MinData)
         
@@ -472,14 +493,17 @@ def fetchAccessToken():
     password = str(data["password"])
     api_secret = str(data["api_secret"])
     answer = str(data["answer"])
+    appid = str(data["appid"])
+    if not appid:
+        appid = None
     print("requested accessToken for username = "+str(username))
 
     try:
-        accessToken = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret)
+        accessToken = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret, app_id = appid)
         
     except Exception as e:
         print(str(e))
-        accessToken = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret)
+        accessToken = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret, app_id = appid)
         
     return {'access_token': str(accessToken), "username": username}
 
@@ -599,7 +623,6 @@ def set_allow_origin(resp):
     
 if __name__ == '__main__':
   app.run(host='127.0.0.1', port=8080)
-
 
 
 
