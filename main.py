@@ -1,5 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jan 12 21:14:47 2021
 
-import json
+@author: pkaribasappa
+"""
+
+
+import json, time
 from flask import Flask, request, jsonify
 import sys
 
@@ -11,11 +19,18 @@ import pytz
 from flask_cors import CORS, cross_origin
 from pytz import timezone
 import threading
+import random
 app = Flask(__name__)
 
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 import logging
+
+
+from os.path import isfile, join
+from os import listdir
+
+
 logging.basicConfig(level=logging.INFO)
 
 isFirstTime = False
@@ -24,6 +39,12 @@ isFirstTime = False
 exitWS1 = False
 exitWS2 = False
 
+#candleData
+isCandle3MinDataGot = False
+isCandle5MinDataGot = False
+isCandle15MinDataGot = False
+isCandle60MinDataGot = False
+
 #Upstox
 upstoxApiKey = 'dPMbue9lq7abjTPCeuJ0Y8tYNEXdwKDd3OQiashl'
 upstoxAccessToken = '1a0a8288920d43cf17d05d6ebab8e09898422065'
@@ -31,9 +52,9 @@ upstoxAccessToken = '1a0a8288920d43cf17d05d6ebab8e09898422065'
 
 allData=[]
 access_token=None
-api_secret = 'JM2GN712F54ZNU8IB4AQRO2Q2ADX19MIPZ4ODJFFTSKBNJZD1OCCQXH5UMON4EAG'
+api_secret = ''
 clientId = 'AB203323'
-password = 'DKP@v@1'
+password = 'DKP@v@5'
 answer = 'no'
 socket_opened = False
 path = "/Users/pkaribasappa/Desktop/Share/UpstoxAlgo/Websocket/"
@@ -43,12 +64,16 @@ livePath=""
 livePathExit="" 
 candle3minPath=""
 candle5minPath=""
+candle15minPath=""
+candle60minPath=""
 
 current_directory = os.getcwd()
 final_directory = os.path.join(current_directory, r'aliceblue')
 livePath = os.path.join(final_directory, r'live')
 candle3minPath = os.path.join(final_directory, r'candle3min')
 candle5minPath = os.path.join(final_directory, r'candle5min')
+candle15minPath = os.path.join(final_directory, r'candle15min')
+candle60minPath = os.path.join(final_directory, r'candle60min')
 
    
    
@@ -58,6 +83,7 @@ def socket_example(intradaySymbols, purpose, access_token):
     
     alice = AliceBlue(username=clientId, password=password, access_token=access_token, master_contracts_to_download=['NSE'])
     
+    print(alice.get_balance())
     alice.start_websocket(subscribe_callback=event_handler_quote_update,
                       socket_open_callback=open_callback,
                       run_in_background=True)
@@ -84,6 +110,7 @@ def socket_example_exit(intradaySymbols, purpose, access_token):
     
     alice = AliceBlue(username=clientId, password=password, access_token=access_token, master_contracts_to_download=['NSE'])
     
+    print(alice.get_balance())
     alice.start_websocket(subscribe_callback=event_handler_quote_update_exit,
                       socket_open_callback=open_callback,
                       run_in_background=True)
@@ -219,6 +246,54 @@ def getCandle5Min():
     except Exception as e:
         data = {}
     return data
+
+@app.route('/api/candle/15M', methods=['GET'])
+@cross_origin(origin='*')
+def getCandle15Min():
+    global candle15minPath
+    data = ""
+    try:
+        path = candle15minPath+'/'
+        token = request.args["instrumenttoken"]
+        fullPath = path + token+".json"
+        data=""
+        
+        with open(fullPath,'r') as f:
+            s = f.read()
+            s = s.replace('\t','')
+            s = s.replace('\n','')
+            s = s.replace(',}','}')
+            s = s.replace(',]',']')
+            s = s.replace("'", '"')
+            data = json.loads(s)
+            f.close()
+    except Exception as e:
+        data = {}
+    return data
+
+@app.route('/api/candle/60M', methods=['GET'])
+@cross_origin(origin='*')
+def getCandle60Min():
+    global candle60minPath
+    data = ""
+    try:
+        path = candle60minPath+'/'
+        token = request.args["instrumenttoken"]
+        fullPath = path + token+".json"
+        data=""
+        
+        with open(fullPath,'r') as f:
+            s = f.read()
+            s = s.replace('\t','')
+            s = s.replace('\n','')
+            s = s.replace(',}','}')
+            s = s.replace(',]',']')
+            s = s.replace("'", '"')
+            data = json.loads(s)
+            f.close()
+    except Exception as e:
+        data = {}
+    return data
     
 def writeToFile(fullPath, content):
     print(fullPath)
@@ -256,12 +331,72 @@ def event_handler_quote_update_exit(message):
     fullPath = livePathExit + '/' + str(message["token"])+".json"
     writeToFile(fullPath, x)
     
+def isGotFirstCandleData(date, whichCandle):
+    res = getCandleData('SBIN', str(whichCandle), date, upstoxApiKey, upstoxAccessToken)
+    if (len(res) ==0):
+        res = getCandleData('TCS', str(whichCandle), date, upstoxApiKey, upstoxAccessToken)
+        if (len(res) ==0):
+            res = getCandleData('INFY', str(whichCandle), date, upstoxApiKey, upstoxAccessToken)
+            if (len(res) ==0):
+                return False
+            else:
+                return True
+        else: 
+            return True
+    else:
+        return True
+        
+def fetchCandleDataFromUpstox(date, whichCandle, candlePath):
+    global livePath, exitWS1, exitWS2, isCandle3MinDataGot, isCandle5MinDataGot
+    global isCandle15MinDataGot, isCandle60MinDataGot
+    tradesWithToken = []
+    tradesWithToken = getTodaysTradesWithToken()
+    if (len(tradesWithToken) ==0):
+        tradesWithToken = getTodaysTradesWithToken()
+        if (len(tradesWithToken) ==0):
+            tradesWithToken = getTodaysTradesWithToken()
+            if (len(tradesWithToken) ==0):
+                tradesWithToken = getTodaysTradesWithToken()
+            
+    isGot = False
+    while(isGot==False):
+        isGot = isGotFirstCandleData(date, whichCandle)
+    start = time.time()
+    for t in tradesWithToken:
+        try:
+            token = str(t["instrumenttoken"])
+            symbol = str(t["symbol"])
+            fullPath = candlePath + '/' + token+".json"
+            if(os.path.exists(fullPath) == False):
+                print("Fetching 3min candle data")
+                res = getCandleData(symbol, str(whichCandle), date, upstoxApiKey, upstoxAccessToken)
+                if(len(res) > 0):
+                    candleData = {
+                        "symbol": symbol,
+                        "high": res[0]["high"],
+                        "low": res[0]["low"],
+                        "exchange_time_stamp": res[0]["timestamp"]
+                    }
+                    writeToFile(fullPath, candleData)
+                    if (int(whichCandle) == 3):
+                        isCandle3MinDataGot = True
+                    if (int(whichCandle) == 5):
+                        isCandle5MinDataGot = True
+                    if (int(whichCandle) == 15):
+                        isCandle15MinDataGot = True
+                    if (int(whichCandle) == 60):
+                        isCandle60MinDataGot = True
+        except Exception as e:
+            print(str(e))
+        
+    print(f'Time taken to fetch all candles data : {time.time() - start}')
     
+        
     
 def event_handler_quote_update(message):
     #print(message)
     
-    global livePath, candle3minPath, candle5minPath, exitWS1, exitWS2
+    global livePath, candle3minPath, candle5minPath, candle15minPath, candle60minPath, exitWS1, exitWS2, isCandle3MinDataGot, isCandle5MinDataGot, isCandle15MinDataGot, isCandle60MinDataGot
     
     if(exitWS1 == True):
         sys.exit('Exiting')
@@ -286,6 +421,7 @@ def event_handler_quote_update(message):
     
     x = {
         "symbol": symbol,
+        "token": str(message["token"]),
     	"open": open,
         "high": high,
         "low": low,
@@ -305,86 +441,127 @@ def event_handler_quote_update(message):
     eHour = exchangeTime.hour
     eMin = exchangeTime.minute
     eSec = exchangeTime.second
-    fullPath = livePath + '/' + str(message["token"])+".json"
+    token = str(message["token"])
+    fullPath = livePath + '/' + token+".json"
     writeToFile(fullPath, x)
     
     date = str(exchangeTime.day).zfill(2) +"-"+ str(exchangeTime.month).zfill(2) +"-"+ str(exchangeTime.year).zfill(2)
-    print(date)
+    print(date +" "+str(eHour)+":"+str(eMin)+":"+str(eSec))
     
     
-    if(eHour==9 and eMin==18 and (eSec>=0 and eSec<=30)):
-        fullPath = candle3minPath + '/' + str(message["token"])+".json"
+    if(eHour==9 and eMin==18 and eMin <=19 and (eSec>=30)):
+        fullPath = candle3minPath + '/' + token+".json"
         if(os.path.exists(fullPath) == False):
-            print("Fetching 3min candle data")
-            res = getCandleData(symbol, '3', date, upstoxApiKey, upstoxAccessToken)
-            if(len(res) > 0):
-                candle3MinData = {
-                    "symbol": symbol,
-                    "high": res[0]["high"],
-                    "low": res[0]["low"],
-                    "exchange_time_stamp": res[0]["timestamp"]
-                }
-                writeToFile(fullPath, candle3MinData)
-            else:
-                candle3MinData = {
+            candleData = {
                     "symbol": symbol,
                     "high": high,
                     "low": low,
                     "exchange_time_stamp": exchange_time_stamp
                 }
-                writeToFile(fullPath, candle3MinData)
+            writeToFile(fullPath, candleData)
+            
         
-    if(eHour==9 and eMin==20 and (eSec>=0 and eSec<=30)):
-        fullPath = candle5minPath + '/' + str(message["token"])+".json"
+    if(eHour==9 and eMin==20 and eMin<=21 and (eSec>=30)):
+        fullPath = candle5minPath + '/' + token+".json"
         if(os.path.exists(fullPath) == False):
-            print("Fetching 5min candle data")
-            res = getCandleData(symbol, '5', date, upstoxApiKey, upstoxAccessToken)
-            if(len(res)>0):
-                candle5MinData = {
-                    "symbol": symbol,
-                    "high": res[0]["high"],
-                    "low": res[0]["low"],
-                    "exchange_time_stamp": res[0]["timestamp"]
-                }
-                writeToFile(fullPath, candle5MinData)
-                
-            else:
-                candle5MinData = {
+            candleData = {
                     "symbol": symbol,
                     "high": high,
                     "low": low,
                     "exchange_time_stamp": exchange_time_stamp
                 }
-                writeToFile(fullPath, candle5MinData)
-        
-    
+            writeToFile(fullPath, candleData)
+    if(eHour==9 and eMin==30 and eMin<=21 and (eSec>=30)):
+        fullPath = candle15minPath + '/' + token+".json"
+        if(os.path.exists(fullPath) == False):
+            candleData = {
+                    "symbol": symbol,
+                    "high": high,
+                    "low": low,
+                    "exchange_time_stamp": exchange_time_stamp
+                }
+            writeToFile(fullPath, candleData)
+    if(eHour==10 and eMin==15 and eMin<=21 and (eSec>=30)):
+        fullPath = candle60minPath + '/' + token+".json"
+        if(os.path.exists(fullPath) == False):
+            candleData = {
+                    "symbol": symbol,
+                    "high": high,
+                    "low": low,
+                    "exchange_time_stamp": exchange_time_stamp
+                }
+            writeToFile(fullPath, candleData)
+# =============================================================================
+#         if (isCandle5MinDataGot == False):
+#             print("getting ready for candle data fetch for 5 min")
+#             fetchCandleDataFromUpstox(date, '5', candle5minPath)
+#             if (isCandle5MinDataGot == False):
+#                 print("nomore candle data found, something is wrong with 5 min candle from upstox--Error")
+#                 fullPath = candle5minPath + '/' + token+".json"
+#                 if(os.path.exists(fullPath) == False):
+#                     candleData = {
+#                             "symbol": symbol,
+#                             "high": high,
+#                             "low": low,
+#                             "exchange_time_stamp": exchange_time_stamp
+#                         }
+#                     writeToFile(fullPath, candleData)
+#         if (isCandle5MinDataGot == True):
+#             fullPath = candle5minPath + '/' + token+".json"
+#             if(os.path.exists(fullPath) == False):
+#                 candleData = {
+#                         "symbol": symbol,
+#                         "high": high,
+#                         "low": low,
+#                         "exchange_time_stamp": exchange_time_stamp
+#                     }
+#                 writeToFile(fullPath, candleData)
+# =============================================================================
 
     
 def getIntradaySymbols():
-    url = "http://pro.justalgotrades.com/api/trades/today";
+    url = "http://pro.justalgotrades.com/api/trades/today"
     headers = {'Content-Type': 'application/json'}
     res = requests.get(url, headers=headers)
 
     print(res)
-    data = res.json()["data"];
+    data = res.json()["data"]
     return data
 
-def fetchAccessToken():
-    global access_token
-    
-    username = "AB203323"
-    password = "DKP@v@1"
-    api_secret = "JM2GN712F54ZNU8IB4AQRO2Q2ADX19MIPZ4ODJFFTSKBNJZD1OCCQXH5UMON4EAG"
-    answer = "no"
-    print("requested accessToken for username = "+str(username))
+def getExistingAccessToken():
+    url = "https://pro.justalgotrades.com/api/client/eligible"
+    headers = {'Content-Type': 'application/json'}
+    res = requests.get(url, headers=headers)
 
+    print(res)
+    data = res.json()["data"]
+    return random.choice(data)["accesstoken"]
+
+def getRandomClientId():
+    url = "https://pro.justalgotrades.com/api/client/eligible"
+    headers = {'Content-Type': 'application/json'}
+    res = requests.get(url, headers=headers)
+
+    print(res)
+    data = res.json()["data"]
+    return random.choice(data)["clientid"]
+
+
+def getTodaysTradesWithToken():
+    
+    data = []
     try:
-        access_token = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret)
-        
+        clientId = getRandomClientId()
+        url = "https://pro.justalgotrades.com/api/trades/clients/"+str(clientId)
+        headers = {'Content-Type': 'application/json'}
+        res = requests.get(url, headers=headers)
+    
+        print("CandleFetch=======================fetching trades for clientid="+str(clientId))
+        data  = res.json()["data"]
     except Exception as e:
         print(str(e))
-        access_token = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret)
-    return access_token
+    return data
+
         
 def startUpdate():
     global access_token
@@ -399,13 +576,13 @@ def startUpdate():
     
     print("got intraday symbols")
     allSymbols=[]
-    access_token = fetchAccessTokenForWebsocket()
+    access_token = getExistingAccessToken()
     print(access_token)
     for name in data:
         allSymbols.append(name)
         
     #print("Aliceblue access token = "+access_token)
-    socket_example(allSymbols,"update", access_token['access_token'])
+    socket_example(allSymbols,"update", access_token)
     
 def startUpdateExit():
     global access_token
@@ -420,70 +597,89 @@ def startUpdateExit():
     
     print("got intraday symbols")
     allSymbols=[]
-    access_token = fetchAccessTokenForWebsocket()
+    access_token = getExistingAccessToken()
     print(access_token)
     for name in data:
         allSymbols.append(name)
         
     #print("Aliceblue access token = "+access_token)
-    socket_example_exit(allSymbols,"update", access_token['access_token'])
-
-
-def startInsert():
-    data=""
-    try:
-        data = getIntradaySymbols()
-    except Exception as e:
-        print(str(e))
-        data = getIntradaySymbols()
-    
-    print("got intraday symbols")
-    allSymbols=[]
-    getUpstoxAccessToken()
-    #getPreRequisiteDataFromDB()
-    for name in data:
-        n=""
-        h=""
-        l=""
-        i = 0
-        for key, value in name.items():
-            if(key=="name"):
-                n = value
-            if(key=="high"):
-                h = value
-            if(key=="low"):
-                l = value
-            
-        try:
-            allSymbols.append(n)
-        except Exception as e:
-            print(e)
-    print("Upstox access token = "+access_token)
-    socket_example(allSymbols, "insert")
+    socket_example_exit(allSymbols,"update", access_token)
     
 
+
+@app.route('/api/candle/update/3M', methods=['POST'])
+@cross_origin(origin='*')
+def updateCandle3Min():
+    global candle3minPath
+    data = request.json
+    fullPath = candle3minPath + '/' + str(data["token"])+".json"
+    
+    if(os.path.exists(fullPath) == False):
+        print("updating candle data 3M for "+str(data["symbol"]))
+        candleData = {
+                "symbol": str(data["symbol"]),
+                "high": str(data["high"]),
+                "low": str(data["low"]),
+                "exchange_time_stamp": str(data["timestamp"])
+            }
+        writeToFile(fullPath, candleData)
+    return {'data': 'Updated 3Min candle for '+str(data["symbol"])}
+
+
+@app.route('/api/candle/update/5M', methods=['POST'])
+@cross_origin(origin='*')
+def updateCandle5Min():
+    global candle5minPath
+    data = request.json
+    fullPath = candle5minPath + '/' + str(data["token"])+".json"
+    
+    if(os.path.exists(fullPath) == False):
+        print("updating candle data 5M for "+str(data["symbol"]))
+        candleData = {
+                "symbol": str(data["symbol"]),
+                "high": str(data["high"]),
+                "low": str(data["low"]),
+                "exchange_time_stamp": str(data["timestamp"])
+            }
+        writeToFile(fullPath, candleData)
+    return {'data': 'Updated 5Min candle for '+str(data["symbol"])}
+
+@app.route('/api/candle/update/15M', methods=['POST'])
+@cross_origin(origin='*')
+def updateCandle15Min():
+    global candle15minPath
+    data = request.json
+    fullPath = candle15minPath + '/' + str(data["token"])+".json"
+    
+    if(os.path.exists(fullPath) == False):
+        print("updating candle data 15M for "+str(data["symbol"]))
+        candleData = {
+                "symbol": str(data["symbol"]),
+                "high": str(data["high"]),
+                "low": str(data["low"]),
+                "exchange_time_stamp": str(data["timestamp"])
+            }
+        writeToFile(fullPath, candleData)
+    return {'data': 'Updated 15Min candle for '+str(data["symbol"])}
+
+@app.route('/api/candle/update/60M', methods=['POST'])
+@cross_origin(origin='*')
+def updateCandle60Min():
+    global candle60minPath
+    data = request.json
+    fullPath = candle60minPath + '/' + str(data["token"])+".json"
+    
+    if(os.path.exists(fullPath) == False):
+        print("updating candle data 60M for "+str(data["symbol"]))
+        candleData = {
+                "symbol": str(data["symbol"]),
+                "high": str(data["high"]),
+                "low": str(data["low"]),
+                "exchange_time_stamp": str(data["timestamp"])
+            }
+        writeToFile(fullPath, candleData)
+    return {'data': 'Updated 60Min candle for '+str(data["symbol"])}
         
-def startTest():
-    setValues.add("a")
-    setValues.add("b")
-    setValues.add("C")
-    setValues.add("a")
-    print(setValues)
-
-class LiveData:
-    def __init__(self, name, open, high, low, ltp, total_buy_qty, total_sell_qty, buy_price, sell_price):
-        self.name = name
-        self.open = open
-        self.high = high
-        self.low = low
-        self.ltp = ltp
-        self.total_buy_qty = total_buy_qty
-        self.total_sell_qty = total_sell_qty
-        self.buy_price = buy_price
-        self.sell_price = sell_price
-    def printData(self):
-        #print(self.name+":"+str(self.high)+":"+str(self.low))
-        return {"name":self.name,"open":self.open, "high":str(self.high), "low": str(self.low), "ltp": str(self.ltp), "total_buy_qty": str(self.total_buy_qty), "total_sell_qty": str(self.total_sell_qty), "buy_qty": str(self.buy_price), "sell_qty": str(self.sell_price)}
 
 @app.route('/api/fetch/access', methods=['POST'])
 @cross_origin(origin='*')
@@ -508,31 +704,20 @@ def fetchAccessToken():
     return {'access_token': str(accessToken), "username": username}
 
 
-def fetchAccessTokenForWebsocket():
-    global username, password, api_secret, answer
-    username = clientId
-    password = password
-    api_secret = api_secret
-    answer = answer
-    
-    print("requested accessToken for username = "+str(username))
-
-    try:
-        accessToken = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret)
-        
-    except Exception as e:
-        print(str(e))
-        accessToken = AliceBlue.login_and_get_access_token(username = username, password = password, twoFA = answer,  api_secret = api_secret)
-        
-    return {'access_token': str(accessToken), "username": username}
 
 
 @app.route('/api/websocket/start', methods=['GET'])
 @cross_origin(origin='*')
 def startWebsocket():
     
-    global final_directory, livePath, candle3minPath, candle5minPath, upstoxAccessToken, exitWS1
+    global final_directory, livePath, candle3minPath, candle5minPath, candle15minPath, candle60minPath, upstoxAccessToken
+    global exitWS1, isCandle3MinDataGot, isCandle5MinDataGot, isCandle15MinDataGot, isCandle60MinDataGot
     exitWS1 = False
+    isCandle3MinDataGot = False
+    isCandle5MinDataGot = False
+    isCandle15MinDataGot = False
+    isCandle60MinDataGot = False
+    
     upstoxAccessToken = request.args.get('upstoxAccessToken')
     print(upstoxAccessToken)
     current_directory = os.getcwd()
@@ -559,6 +744,18 @@ def startWebsocket():
         os.makedirs(candle5minPath)
     else:
         os.system("rm -rf "+candle5minPath)
+
+    candle15minPath = os.path.join(final_directory, r'candle15min')
+    if not os.path.exists(candle15minPath):
+        os.makedirs(candle15minPath)
+    else:
+        os.system("rm -rf "+candle15minPath)
+
+    candle60minPath = os.path.join(final_directory, r'candle60min')
+    if not os.path.exists(candle60minPath):
+        os.makedirs(candle60minPath)
+    else:
+        os.system("rm -rf "+candle60minPath)
    
     startUpdate()
     return {'status': 'started'}
@@ -566,8 +763,13 @@ def startWebsocket():
 @app.route('/api/websocket/start/exit', methods=['GET'])
 @cross_origin(origin='*')
 def startWebsocketForExit():
-    global final_directory, livePathExit, upstoxAccessToken, exitWS2
+    global final_directory, livePathExit, upstoxAccessToken, exitWS2, isCandle3MinDataGot, isCandle5MinDataGot, isCandle15MinDataGot, isCandle60MinDataGot
     exitWS2 = False
+    isCandle3MinDataGot = False
+    isCandle5MinDataGot = False
+    isCandle15MinDataGot = False
+    isCandle60MinDataGot = False
+    
     upstoxAccessToken = request.args.get('upstoxAccessToken')
     print(upstoxAccessToken)
     current_directory = os.getcwd()
@@ -620,9 +822,42 @@ def set_allow_origin(resp):
     return resp
 
 
-    
+@app.route('/api/live/all/full', methods=['GET'])
+@cross_origin(origin='*')
+def getFullData():
+    data = []
+    global livePath
+    try:        
+        path = livePath+'/'
+        
+        mypath = path
+        onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+        print(onlyfiles)
+
+        for file in onlyfiles:
+            fullPath = path + file
+            
+            with open(fullPath,'r') as f:
+                s = f.read()
+                s = s.replace('\t','')
+                s = s.replace('\n','')
+                s = s.replace(',}','}')
+                s = s.replace(',]',']')
+                s = s.replace("'", '"')
+                
+                data.append(json.loads(s))
+                f.close()
+    except Exception as e:
+        print(str(e))
+    return {"data": data}
+
+
+
+   
+#print(getExistingAccessToken()) 
 if __name__ == '__main__':
   app.run(host='127.0.0.1', port=8080)
+
 
 
 
