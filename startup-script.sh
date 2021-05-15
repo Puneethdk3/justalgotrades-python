@@ -30,18 +30,18 @@ useradd -m -d /home/pythonapp pythonapp
 
 # Fetch source code
 export HOME=/root
-git clone https://github.com/Puneethdk3/justalgotrades-python.git /opt/app
+git clone https://github.com/Puneethdk3/justalgotrades-python.git /opt/app/justalgotrades
 
 # Python environment setup
-virtualenv -p python3 /opt/app/env
-source /opt/app/env/bin/activate
-/opt/app/env/bin/pip install -r /opt/app/requirements.txt
+virtualenv -p python3 /opt/app/justalgotrades/env
+source /opt/app/justalgotrades/env/bin/activate
+/opt/app/justalgotrades/env/bin/pip install -r /opt/app/justalgotrades/requirements.txt
 
 # Set ownership to newly created account
 chown -R pythonapp:pythonapp /opt/app
 
 # Put supervisor configuration in proper place
-cp /opt/app/python-app.conf /etc/supervisor/conf.d/python-app.conf
+cp /opt/app/justalgotrades/python-app.conf /etc/supervisor/conf.d/python-app.conf
 
 # Start service via supervisorctl
 supervisorctl reread
