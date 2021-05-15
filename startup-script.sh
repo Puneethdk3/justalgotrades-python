@@ -33,15 +33,15 @@ export HOME=/root
 git clone https://github.com/Puneethdk3/justalgotrades-python.git /opt/app
 
 # Python environment setup
-virtualenv -p python3 /opt/app/justalgotrades-python/env
-source /opt/app/justalgotrades-python/env/bin/activate
-/opt/app/justalgotrades-python/env/bin/pip install -r /opt/app/justalgotrades-python/requirements.txt
+virtualenv -p python3 /opt/app/env
+source /opt/app/env/bin/activate
+/opt/app/env/bin/pip install -r /opt/app/requirements.txt
 
 # Set ownership to newly created account
 chown -R pythonapp:pythonapp /opt/app
 
 # Put supervisor configuration in proper place
-cp /opt/app/justalgotrades-python/python-app.conf /etc/supervisor/conf.d/python-app.conf
+cp /opt/app/python-app.conf /etc/supervisor/conf.d/python-app.conf
 
 # Start service via supervisorctl
 supervisorctl reread
